@@ -2,18 +2,15 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-# Copiem doar fișierul de cerințe
-COPY requirements.txt .
+# 1. Copiem requirements.txt direct din folderul cod_python
+COPY cod_python/requirements.txt .
 
-# ✅ OPTIMIZARE CRITICĂ: Instalăm mai întâi versiunea de CPU pentru torch
-# Acest lucru previne descărcarea gigantică a pachetelor grele de CUDA și erorile de hash
-RUN pip install --no-cache-dir torch==2.3.1 --extra-index-url https://download.pytorch.org/whl/cpu
-
-# Instalăm restul pachetelor din requirements.txt
+# 2. Instalăm torch de CPU și dependențele
+RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiem restul codului sursă
-COPY . .
+# 3. Copiem fișierele de cod
+COPY cod_python/ .
 
 EXPOSE 8000
 
