@@ -6,7 +6,7 @@ WORKDIR /app
 COPY cod_python/requirements.txt .
 
 # 2. Instalăm torch de CPU și dependențele
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir torch==2.3.1 --extra-index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
 
 # 3. Copiem fișierele de cod
