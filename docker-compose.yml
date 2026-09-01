@@ -1,0 +1,52 @@
+services:
+  backend:
+    build:
+      context: ./cod_python
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./db_cursuri:/db_cursuri
+      - ./incarcari_temporare:/incarcari_temporare
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      - redis
+
+  frontend:
+    image: python:3.10-slim
+    command: sh -c "pip install streamlit requests && python -m streamlit run /app/frontend.py --server.port 8501 --server.address 0.0.0.0"
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./cod_python:/app
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:alpine
+    container_name: rag_redis_cache
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  evaluator:
+    build:
+      context: ./cod_python
+      dockerfile: Dockerfile
+    command: python evaluate_rag.py
+    volumes:
+      - ./db_cursuri:/db_cursuri
+      - ./cod_python:/app
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - backend
+    restart: "no"
+
+volumes:
+  redis_data:
