@@ -38,9 +38,6 @@ class TutorialRAGAgent:
             self.redis_client = None
             print("🟡 Redis nu este disponibil. Cache-ul va fi ignorat.")
 
-    # ==========================================
-    # FUNCȚIE NOUĂ: Similaritate Cosinus
-    # ==========================================
     def _cosine_similarity(self, v1, v2):
         """Calculează distanța semantică între 2 vectori."""
         dot_product = sum(a * b for a, b in zip(v1, v2))
@@ -49,7 +46,6 @@ class TutorialRAGAgent:
         if norm_v1 == 0 or norm_v2 == 0:
             return 0.0
         return dot_product / (norm_v1 * norm_v2)
-
 
     def _get_context_semantic(self, question, user_id, active_reranker):
         """Căutare care suportă comutarea între Classic RAG și Reranked RAG."""
@@ -68,7 +64,6 @@ class TutorialRAGAgent:
             print("🔍 Mod [CLASIC]: Se extrag Top 3 documente direct din ChromaDB...")
             return self.vector_db.similarity_search(question, k=3, filter={"user_id": user_id})
         
-    
     def _get_context_by_keywords(self, question, user_id):
         """Căutare lexicală de urgență, limitată strict la documentele utilizatorului."""
         print("🔍 Agentul Critic rulează căutarea lexicală bazată pe cuvinte-cheie...")
@@ -88,7 +83,6 @@ class TutorialRAGAgent:
             if len(doc_potrivite) >= 3: break
 
         return doc_potrivite
-
 
     def _generate_with_gemini(self, prompt):
         """Metodă avansată rezistentă la erorile de tip 503 și 429."""
@@ -120,7 +114,6 @@ class TutorialRAGAgent:
                     break
         return ""
 
-
     def _is_valid(self, response, require_source=True):
         if "LIPSA_CONTEXT" in response: return False
             
@@ -134,6 +127,17 @@ class TutorialRAGAgent:
         else:
             return is_long_enough and not este_negatie
 
+    def _substituie_etichete_context(self, text, mapare_documente):
+        """Înlocuiește tagurile neutre [DOC_X] cu 'Nume_Fisier (Pagina Y)' specifice utilizatorului curent."""
+        rezultat = text
+        for eticheta, (sursa_reala, pagina_reala) in mapare_documente.items():
+            # Doar numele și pagina, pentru a nu dubla "Conform cursului" din prompt
+            referinta_completa = f"{sursa_reala} (Pagina {pagina_reala})"
+            rezultat = rezultat.replace(eticheta, referinta_completa)
+    
+        # Fallback gramatical coerent în caz că LLM-ul a inventat un tag neexistent:
+        rezultat = re.sub(r'\[DOC_[a-zA-Z0-9_]+\]', 'materialelor suport', rezultat)
+        return rezultat
 
     def ask(self, question, user_id, use_reranker=None, use_context_framing=None, use_fallback=None, use_cache=None):
         timp_start = time.time()
@@ -146,27 +150,33 @@ class TutorialRAGAgent:
         docs = self._get_context_semantic(question, user_id, active_reranker)
         
         # ==========================================
-        # 1. LOGICĂ SEMANTIC CACHE (Cosinus)
+        # 1. GENERARE MAPARE DINAMICĂ (source_file, page_number)
+        # ==========================================
+        mapare_documente = {}
+        for index, d in enumerate(docs):
+            eticheta_doc = f"[DOC_{index+1}]"
+            sursa = d.metadata.get('source_file', 'Curs_Necunoscut.pdf')
+            pagina = d.metadata.get('page_number', 'N/A')
+            mapare_documente[eticheta_doc] = (sursa, pagina)
+
+        # ==========================================
+        # 2. LOGICĂ SEMANTIC CACHE (Cosinus)
         # ==========================================
         hash_uri_fragmente = sorted([d.metadata.get('text_hash', '') for d in docs])
         semnatura_context = hashlib.sha256("".join(hash_uri_fragmente).encode('utf-8')).hexdigest()
         stare_config = f"R={active_reranker}_F={active_framing}_FB={active_fallback}"
         
-        # Hash Map key in Redis
         semcache_key = f"semcache:{stare_config}:{semnatura_context}"
         q_emb = []
 
         if active_cache and self.redis_client:
             try:
-                # Obținem embedding-ul întrebării curente direct din ChromaDB encoder
                 if hasattr(self.vector_db, 'embeddings'):
                     q_emb = self.vector_db.embeddings.embed_query(question)
                 else:
                     q_emb = self.vector_db._embedding_function.embed_query(question)
                 
-                # Aducem toate întrebările salvate pentru acest context
                 cached_entries = self.redis_client.hgetall(semcache_key)
-                
                 best_sim = 0.0
                 best_match = None
                 best_q_text = ""
@@ -179,7 +189,6 @@ class TutorialRAGAgent:
                         best_match = data
                         best_q_text = q_text
 
-                # Setăm pragul de similaritate (ex: 92%)
                 if best_match and best_sim >= 0.92:
                     print(f"⚡ [SEMANTIC CACHE HIT] Sim={best_sim:.3f} | Sursă: '{best_q_text}'")
                     timp_executie = round(time.time() - timp_start, 4)
@@ -187,29 +196,31 @@ class TutorialRAGAgent:
                     if best_match["answer"] == "FLAG_LIPSA_CONTEXT":
                         return {"answer": "Îmi pare rău, dar informația solicitată nu se găsește în documentele furnizate.", "status": "lipsa_context_cache", "sources": [d.metadata for d in docs], "latency": timp_executie}
                     else:
-                        return {"answer": best_match["answer"], "status": "success_cache", "sources": best_match["sources"], "latency": timp_executie}
+                        # Se aplică de-anonimizarea dinamică a numelui și paginii pentru utilizatorul curent
+                        raspuns_rezolvat = self._substituie_etichete_context(best_match["answer"], mapare_documente) if active_framing else best_match["answer"]
+                        return {"answer": raspuns_rezolvat, "status": "success_cache", "sources": [d.metadata for d in docs], "latency": timp_executie}
                         
             except Exception as e:
                 print(f"⚠️ Eroare la accesarea Semantic Cache: {e}")
 
-        # Dacă nu e în cache sau cache e dezactivat, continuăm generarea
+        # ==========================================
+        # 3. GENERARE RĂSPUNS CU MODELUL LLM
+        # ==========================================
         attempt = 0
-        final_response = ""
+        final_response_raw = ""
         foloseste_keyword_search = False
 
         while attempt < self.max_retries:
-            mapare_documente = {}
             if active_framing:
                 context_elemente = []
                 for index, d in enumerate(docs):
                     eticheta_doc = f"[DOC_{index+1}]"
-                    mapare_documente[eticheta_doc] = d.metadata.get('source_file', 'Curs_Necunoscut.pdf')
-                    context_elemente.append(f"Conform cursului {eticheta_doc} (Pagina {d.metadata.get('page_number', 'N/A')}), {d.page_content}")
+                    context_elemente.append(f"Conform cursului {eticheta_doc}, {d.page_content}")
                 context_complet = "\n\n".join(context_elemente)
 
                 prompt = f"""### Instruction: You are an academic expert. Answer the question in Romanian using ONLY the provided context.
                 If the context does not contain the answer, reply EXACTLY and ONLY with the word: 'LIPSA_CONTEXT'.
-                Otherwise, your response MUST start exactly with the phrase: 'Conform cursului [DOC_1], (Pagina X), ...' (Use the appropriate document tag from the context).
+                Otherwise, your response MUST start exactly with the phrase: 'Conform cursului [DOC_1] ...' (Use the appropriate document tag from the context).
 
                 ### Context:
                 {context_complet}
@@ -228,24 +239,22 @@ class TutorialRAGAgent:
                 ### Answer:"""
 
             print(f"🔄 Generare răspuns (Încercarea {attempt + 1}). Fallback activ: {foloseste_keyword_search}")
-            final_response = self._generate_with_gemini(prompt)
+            final_response_raw = self._generate_with_gemini(prompt)
 
-            if self._is_valid(final_response, require_source=active_framing):
+            if self._is_valid(final_response_raw, require_source=active_framing):
                 print("✅ Răspuns VALIDAT semantic!")
                 
-                if active_framing:
-                    for eticheta, sursa_reala in mapare_documente.items():
-                        final_response = final_response.replace(eticheta, sursa_reala)
-                    final_response = re.sub(r'\[DOC_[a-zA-Z0-9_]+\]', 'Documentele furnizate', final_response)
-                
-                # Salvăm în Semantic Cache
+                # Salvăm în cache răspunsul brut ce conține [DOC_X] (complet agnostic de nume și pagină)
                 if active_cache and self.redis_client and q_emb:
-                    cache_data = json.dumps({"embedding": q_emb, "answer": final_response, "sources": [d.metadata for d in docs]})
+                    cache_data = json.dumps({"embedding": q_emb, "answer": final_response_raw, "sources": [d.metadata for d in docs]})
                     self.redis_client.hset(semcache_key, question, cache_data)
-                    self.redis_client.expire(semcache_key, 86400) # Expiră după 24h
+                    self.redis_client.expire(semcache_key, 86400)
                 
+                # De-anonimizăm răspunsul pentru afișarea către client
+                raspuns_final = self._substituie_etichete_context(final_response_raw, mapare_documente) if active_framing else final_response_raw
+
                 return {
-                    "answer": final_response,
+                    "answer": raspuns_final,
                     "status": "success_keyword_search" if foloseste_keyword_search else "success",
                     "sources": [d.metadata for d in docs],
                     "latency": round(time.time() - timp_start, 4) 
@@ -255,6 +264,8 @@ class TutorialRAGAgent:
                 if active_fallback:
                     print("🚨 Eșec validare. Se activează fallback-ul pe Cuvinte-Cheie...")
                     docs = self._get_context_by_keywords(question, user_id)
+                    # Recalculăm maparea pe noul set de documente din fallback
+                    mapare_documente = {f"[DOC_{idx+1}]": (d.metadata.get('source_file', 'Curs_Necunoscut.pdf'), d.metadata.get('page_number', 'N/A')) for idx, d in enumerate(docs)}
                     foloseste_keyword_search = True
                 else:
                     break 
@@ -263,11 +274,11 @@ class TutorialRAGAgent:
             attempt += 1
 
         # ==========================================
-        # FINALIZARE ȘI FALLBACK DETERMINIST
+        # 4. FINALIZARE ȘI FALLBACK DETERMINIST
         # ==========================================
         timp_executie = round(time.time() - timp_start, 4)
         
-        if "LIPSA_CONTEXT" in final_response or attempt >= self.max_retries:
+        if "LIPSA_CONTEXT" in final_response_raw or attempt >= self.max_retries:
             if active_cache and self.redis_client and q_emb:
                 cache_data = json.dumps({"embedding": q_emb, "answer": "FLAG_LIPSA_CONTEXT", "sources": []})
                 self.redis_client.hset(semcache_key, question, cache_data)

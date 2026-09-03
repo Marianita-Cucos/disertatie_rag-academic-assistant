@@ -19,3 +19,4 @@ Cerinta.txt
 *.zip
 llama2_disertatie_adapter/
 cod_python/generare_dataset.py
+*.jsonl
