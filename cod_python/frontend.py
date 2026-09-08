@@ -5,7 +5,7 @@ import requests
 import pandas as pd  
 
 # API_URL = "http://backend:8000" 
-API_URL = "https://5dbe-34-125-118-173.ngrok-free.app"
+API_URL = "https://e4a6-34-125-118-173.ngrok-free.app"
 
 st.set_page_config(page_title="Sistem Academic RAG", layout="wide")
 

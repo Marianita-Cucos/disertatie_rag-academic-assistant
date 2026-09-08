@@ -35,18 +35,24 @@ class TutorialRAGAgent:
             redis_port = int(os.getenv("REDIS_PORT", 6379))
             redis_password = os.getenv("REDIS_PASSWORD", None)
 
+            print("Debugging: Încerc conectarea la Redis...")
+            
             self.redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 decode_responses=True,
-                ssl=False
+                ssl=False,
+                socket_timeout=5  
             )
+            
+            print("Se trimite ping către Redis...")
             self.redis_client.ping()
             print(f"🟢 Conexiune la Redis Cache ({redis_host}) stabilită cu succes!")
+            
         except Exception as e:
             self.redis_client = None
-            print(f"🟡 Redis nu este disponibil ({e}). Cache-ul va fi ignorat.")
+            print(f"🟡 Redis nu este disponibil: {type(e).__name__} -> {e}")
 
     def _cosine_similarity(self, v1, v2):
         """Calculează distanța semantică între 2 vectori."""
