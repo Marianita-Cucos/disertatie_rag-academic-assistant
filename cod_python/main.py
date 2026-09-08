@@ -9,8 +9,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from agent import TutorialRAGAgent
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Distributed Academic Tutorial API", version="1.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # --- CONFIGURĂRI INIȚIALE ---
 # Calea ta stabilă și existentă către baza de date

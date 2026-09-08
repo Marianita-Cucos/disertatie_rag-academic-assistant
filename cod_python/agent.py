@@ -31,12 +31,25 @@ class TutorialRAGAgent:
             print("⚠️ Re-Ranking dezactivat din configurație.")
         
         try:
-            self.redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+            redis_host = os.getenv("REDIS_HOST", "redis")
+            redis_port = int(os.getenv("REDIS_PORT", 6379))
+            redis_password = os.getenv("REDIS_PASSWORD", None)
+
+            # Dacă REDIS_HOST nu mai este cel local 'redis', folosim SSL pentru Redis Cloud
+            use_ssl = True if redis_host != "redis" and redis_host != "localhost" else False
+
+            self.redis_client = redis.Redis(
+                host=redis_host,
+                port=redis_port,
+                password=redis_password,
+                decode_responses=True,
+                ssl=use_ssl
+            )
             self.redis_client.ping()
-            print("🟢 Conexiune la Redis Cache stabilită cu succes.")
-        except redis.ConnectionError:
+            print(f"🟢 Conexiune la Redis Cache ({redis_host}) stabilită cu succes!")
+        except Exception as e:
             self.redis_client = None
-            print("🟡 Redis nu este disponibil. Cache-ul va fi ignorat.")
+            print(f"🟡 Redis nu este disponibil ({e}). Cache-ul va fi ignorat.")
 
     def _cosine_similarity(self, v1, v2):
         """Calculează distanța semantică între 2 vectori."""

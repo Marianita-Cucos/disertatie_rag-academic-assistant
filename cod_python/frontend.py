@@ -2,8 +2,8 @@ import streamlit as st
 import requests
 import pandas as pd  
 
-# Deoarece frontend-ul rulează în Docker, comunică cu backend-ul folosind numele serviciului
-API_URL = "http://backend:8000" 
+# API_URL = "http://backend:8000" 
+API_URL = "https://a03d-136-108-39-162.ngrok-free.app"
 
 st.set_page_config(page_title="Sistem Academic RAG", layout="wide")
 
