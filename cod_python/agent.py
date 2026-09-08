@@ -35,15 +35,12 @@ class TutorialRAGAgent:
             redis_port = int(os.getenv("REDIS_PORT", 6379))
             redis_password = os.getenv("REDIS_PASSWORD", None)
 
-            # Dacă REDIS_HOST nu mai este cel local 'redis', folosim SSL pentru Redis Cloud
-            use_ssl = True if redis_host != "redis" and redis_host != "localhost" else False
-
             self.redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 decode_responses=True,
-                ssl=use_ssl
+                ssl=False
             )
             self.redis_client.ping()
             print(f"🟢 Conexiune la Redis Cache ({redis_host}) stabilită cu succes!")

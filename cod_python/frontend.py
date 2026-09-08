@@ -1,9 +1,11 @@
+# streamlit run frontend.py
+
 import streamlit as st
 import requests
 import pandas as pd  
 
 # API_URL = "http://backend:8000" 
-API_URL = "https://a03d-136-108-39-162.ngrok-free.app"
+API_URL = "https://5dbe-34-125-118-173.ngrok-free.app"
 
 st.set_page_config(page_title="Sistem Academic RAG", layout="wide")
 
@@ -42,11 +44,18 @@ if pagina_curenta == "💬 Chat Academic":
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
                 data = {"user_id": user_id}
                 try:
-                    response = requests.post(f"{API_URL}/upload-course", files=files, data=data)
+                    headers = {"ngrok-skip-browser-warning": "true"}
+                    response = requests.post(f"{API_URL}/upload-course", files=files, data=data, headers=headers)
                     if response.status_code == 202:
                         st.sidebar.success(f"Fișierul a fost trimis cu succes pentru {user_id}!")
                     else:
-                        st.sidebar.error(f"Eroare: {response.json().get('detail', 'Necunoscută')}")
+                        # Încercăm să citim JSON, dar dacă e HTML/text, afișăm textul brut
+                        try:
+                            mesaj_eroare = response.json().get('detail', 'Necunoscută')
+                        except Exception:
+                            mesaj_eroare = response.text 
+                        
+                        st.sidebar.error(f"Eroare server (Cod {response.status_code}): {mesaj_eroare}")
                 except Exception as e:
                     st.sidebar.error(f"Eroare de conexiune la API: {e}")
         else:
@@ -56,7 +65,8 @@ if pagina_curenta == "💬 Chat Academic":
 
     if st.sidebar.button("🔄 Vezi cursurile mele"):
         try:
-            response = requests.get(f"{API_URL}/cursuri_incarcate", params={"user_id": user_id})
+            headers = {"ngrok-skip-browser-warning": "true"}
+            response = requests.get(f"{API_URL}/cursuri_incarcate", params={"user_id": user_id}, headers=headers)
             if response.status_code == 200:
                 cursuri = response.json().get("cursuri", [])
                 if cursuri:
@@ -92,7 +102,8 @@ if pagina_curenta == "💬 Chat Academic":
             with st.spinner("Se analizează contextul..."):
                 try:
                     payload = {"question": prompt, "user_id": user_id}
-                    response = requests.post(f"{API_URL}/ask-question", json=payload)
+                    headers = {"ngrok-skip-browser-warning": "true"}
+                    response = requests.post(f"{API_URL}/ask-question", json=payload, headers=headers)
                     
                     if response.status_code == 200:
                         date_raspuns = response.json()
