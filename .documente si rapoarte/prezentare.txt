@@ -1,0 +1,44 @@
+
+Cum previne platforma Palantir halucinaţiile agenţilor săi AI (AIP)?
+
+Ce rol are platforma Palantir în raport cu halucinațiile agenților săi AI?
+
+Cine a pictat Mona Lisa?
+
+
+
+Care sunt cele trei proprietăți fundamentale definite în cadrul Teoremei CAP?
+
+Enumera cele trei proprietăți fundamentale din Teorema CAP
+
+
+--- ex cu formule matematice ---
+Cum se definește formal un sistem neuro-simbolic folosind funcții matematice? 
+
+
+---- ex pt corelare slideuri ----
+Care este diferența de bază dintre regularizarea Ridge și regularizarea Lasso în regresia liniară? 
+
+
+--- ex similaritate cache ---
+De ce este considerată partiționarea o axiomă inevitabilă în arhitecturile cloud computing?
+
+De ce este considerată partiționarea o axiomă inevitabilă?
+
+De ce este considerată partiționarea o axiomă importanta în arhitecturile cloud computing?
+
+
+--- ex cautare cuvinte cheie --- 
+
+Ce reprezintă noțiunea de redundanță logică în contextul stocării tranzacționale Delta Lake?
+
+
+--- ex nu a putut gasi informatia --- 
+Ce rol are protocolul Model Context Protocol (MCP) în arhitectura Azure AI Foundry?
+
+Ce rol are protocolul "Model Context Protocol (MCP)" în arhitectura Azure AI Foundry?
+
+
+
+
+

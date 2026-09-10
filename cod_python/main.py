@@ -2,6 +2,7 @@ import os
 import shutil
 import re
 import hashlib
+import hashlib
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Form
 from pydantic import BaseModel
 from langchain_community.document_loaders import PyPDFLoader
@@ -46,6 +47,15 @@ class QuestionResponse(BaseModel):
     status: str
     sources: list
 
+class AuthRequest(BaseModel):
+    username: str
+    password: str
+
+
+USER_DB = {
+    "Student_A": hashlib.sha256("parolaA".encode()).hexdigest(),
+    "Student_B": hashlib.sha256("parolaB".encode()).hexdigest()
+}
 
 # --- FUNCTIE DE CURĂȚARE TEXT ---
 def clean_text(text):
@@ -183,3 +193,22 @@ async def get_cursuri_incarcate(user_id: str):
         return {"status": "success", "cursuri": cursuri}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+
+@app.post("/register")
+def register_user(request: AuthRequest):
+    if request.username in USER_DB:
+        raise HTTPException(status_code=400, detail="Utilizatorul există deja.")
+    
+    hashed_password = hashlib.sha256(request.password.encode()).hexdigest()
+    USER_DB[request.username] = hashed_password
+    return {"status": "success", "message": f"Utilizatorul {request.username} a fost înregistrat cu succes."}
+
+
+@app.post("/login")
+def login_user(request: AuthRequest):
+    hashed_password = hashlib.sha256(request.password.encode()).hexdigest()
+    if request.username not in USER_DB or USER_DB[request.username] != hashed_password:
+        raise HTTPException(status_code=401, detail="Credențiale invalide (username sau parolă greșită).")
+    
+    return {"status": "success", "user_id": request.username}

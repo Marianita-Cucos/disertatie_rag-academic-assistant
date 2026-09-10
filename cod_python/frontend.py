@@ -4,8 +4,8 @@ import streamlit as st
 import requests
 import pandas as pd  
 
-# API_URL = "http://backend:8000" 
-API_URL = "https://e4a6-34-125-118-173.ngrok-free.app"
+API_URL = "http://backend:8000" 
+# API_URL = "https://4455-34-125-118-173.ngrok-free.app"
 
 st.set_page_config(page_title="Sistem Academic RAG", layout="wide")
 
@@ -20,20 +20,63 @@ pagina_curenta = st.sidebar.radio(
 st.sidebar.divider()
 
 # ==============================================================================
-# SECȚIUNEA 1: CHAT ACADEMIC (Codul tău original)
+# SECȚIUNEA 1: CHAT ACADEMIC
 # ==============================================================================
 if pagina_curenta == "💬 Chat Academic":
-    st.title("📚 Sistem Academic RAG (Multi-Tenant)")
+    st.title("📚 Sistem Academic RAG")
 
     st.sidebar.header("🔐 Autentificare")
-    user_id = st.sidebar.text_input("Introdu ID Utilizator (ex: Student_A):", value="Student_A")
 
-    if not user_id:
-        st.warning("⚠️ Te rog să introduci un ID de utilizator pentru a accesa platforma.")
+    # Gestionarea stării de autentificare în sesiune
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+        st.session_state.user_id = ""
+
+    if not st.session_state.logged_in:
+        auth_mode = st.sidebar.radio("Acțiune", ["Log In", "Înregistrare"], label_visibility="collapsed")
+        
+        if auth_mode == "Log In":
+            st.sidebar.subheader("🔑 Intră în cont")
+            login_user_input = st.sidebar.text_input("Username", key="login_user")
+            login_pass_input = st.sidebar.text_input("Parolă", type="password", key="login_pass")
+            
+            if st.sidebar.button("Autentificare"):
+                try:
+                    res = requests.post(f"{API_URL}/login", json={"username": login_user_input, "password": login_pass_input})
+                    if res.status_code == 200:
+                        st.session_state.logged_in = True
+                        st.session_state.user_id = login_user_input
+                        st.rerun()
+                    else:
+                        st.sidebar.error(res.json().get("detail", "Eroare la autentificare"))
+                except Exception as e:
+                    st.sidebar.error(f"Eroare de conexiune: {e}")
+                    
+        else:
+            st.sidebar.subheader("📝 Cont nou")
+            reg_user_input = st.sidebar.text_input("Username nou", key="reg_user")
+            reg_pass_input = st.sidebar.text_input("Parolă nouă", type="password", key="reg_pass")
+            
+            if st.sidebar.button("Creează Cont"):
+                try:
+                    res = requests.post(f"{API_URL}/register", json={"username": reg_user_input, "password": reg_pass_input})
+                    if res.status_code == 200:
+                        st.sidebar.success("Cont creat! Acum te poți loga.")
+                    else:
+                        st.sidebar.error(res.json().get("detail", "Eroare la înregistrare"))
+                except Exception as e:
+                    st.sidebar.error(f"Eroare de conexiune: {e}")
+                    
+        st.sidebar.warning("⚠️ Autentifică-te pentru a continua.")
         st.stop()
-
-    st.sidebar.success(f"Logat ca: **{user_id}**")
-    st.sidebar.divider()
+    else:
+        user_id = st.session_state.user_id
+        st.sidebar.success(f"Logat ca: **{user_id}**")
+        if st.sidebar.button("Log Out"):
+            st.session_state.logged_in = False
+            st.session_state.user_id = ""
+            st.rerun()
+        st.sidebar.divider()
 
     st.sidebar.header("📤 Încărcare Curs Nou")
     uploaded_file = st.sidebar.file_uploader("Încarcă un fișier PDF", type=["pdf"])
@@ -49,7 +92,6 @@ if pagina_curenta == "💬 Chat Academic":
                     if response.status_code == 202:
                         st.sidebar.success(f"Fișierul a fost trimis cu succes pentru {user_id}!")
                     else:
-                        # Încercăm să citim JSON, dar dacă e HTML/text, afișăm textul brut
                         try:
                             mesaj_eroare = response.json().get('detail', 'Necunoscută')
                         except Exception:
@@ -141,7 +183,7 @@ if pagina_curenta == "💬 Chat Academic":
                     st.error(f"Eroare de comunicare cu serverul: {e}")
 
 # ==============================================================================
-# SECȚIUNEA 2: DASHBOARD EVALUARE RAGAS (Noua componentă)
+# SECȚIUNEA 2: DASHBOARD EVALUARE RAGAS
 # ==============================================================================
 elif pagina_curenta == "📊 Dashboard Evaluare RAGAS":
     st.title("📊 Analiza de Performanță a Sistemului RAG")
@@ -151,16 +193,12 @@ elif pagina_curenta == "📊 Dashboard Evaluare RAGAS":
 
     if fisier_csv is not None:
         try:
-            # Citim fișierul CSV
             df = pd.read_csv(fisier_csv)
-            
-            # Curățăm eventualele valori NaN punând 0 pentru a nu strica graficele
             df_numeric = df[['faithfulness', 'answer_relevancy', 'context_precision']].fillna(0)
             
             st.success(f"Fișier încărcat cu succes! {len(df)} întrebări analizate.")
             st.divider()
 
-            # 1. METRICI GLOBALE (Medii)
             st.subheader("📈 Scoruri Medii Globale")
             col1, col2, col3 = st.columns(3)
             
@@ -168,7 +206,6 @@ elif pagina_curenta == "📊 Dashboard Evaluare RAGAS":
             medie_rel = df_numeric['answer_relevancy'].mean()
             medie_ctx = df_numeric['context_precision'].mean()
 
-            # Afișare tip widget metric
             col1.metric("Fidelitate (Faithfulness)", f"{medie_faith:.2f} / 1.0", 
                         help="Măsoară câte din afirmațiile generate pot fi deduse direct din context.")
             col2.metric("Relevanță (Answer Relevancy)", f"{medie_rel:.2f} / 1.0",
@@ -178,12 +215,10 @@ elif pagina_curenta == "📊 Dashboard Evaluare RAGAS":
 
             st.divider()
 
-            # 2. GRAFICE VIZUALE
             col_grafic1, col_grafic2 = st.columns(2)
 
             with col_grafic1:
                 st.subheader("Comparație Metrici (Medii)")
-                # Creăm un mic dataframe pentru Bar Chart
                 df_medii = pd.DataFrame({
                     "Scor": [medie_faith, medie_rel, medie_ctx]
                 }, index=["Faithfulness", "Answer Relevancy", "Context Precision"])
@@ -191,24 +226,18 @@ elif pagina_curenta == "📊 Dashboard Evaluare RAGAS":
 
             with col_grafic2:
                 st.subheader("Distribuția Scorurilor per Întrebare")
-                # Grafic de tip linie/arie care arată evoluția pe fiecare întrebare
                 st.line_chart(df_numeric)
 
             st.divider()
 
-            # 3. DATE BRUTE (TABEL)
             st.subheader("🔍 Detalii per Întrebare")
-            
-            # Ascundem coloana de context care este prea lungă pentru o vizualizare curată, lăsând esențialul
             coloane_de_afisat = ['question', 'answer', 'faithfulness', 'answer_relevancy', 'context_precision']
             
-            # Adăugăm coloanele de latență și status dacă există (din ultimele tale modificări)
             if 'latency_seconds' in df.columns:
                 coloane_de_afisat.append('latency_seconds')
             if 'agent_status' in df.columns:
                 coloane_de_afisat.append('agent_status')
 
-            # Evidențiem valorile scăzute în tabel (opțional, pentru efect wow)
             st.dataframe(
                 df[coloane_de_afisat].style.highlight_min(
                     subset=['faithfulness', 'answer_relevancy', 'context_precision'], 

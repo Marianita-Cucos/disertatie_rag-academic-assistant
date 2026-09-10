@@ -29,30 +29,33 @@ class TutorialRAGAgent:
         else:
             self.reranker = None
             print("⚠️ Re-Ranking dezactivat din configurație.")
-        
+
+        # try:
+        #     self.redis_client = redis.Redis(host='redis', port=6379, db=0, decode_responses=True)
+        #     self.redis_client.ping()
+        #     print("🟢 Conexiune la Redis Cache stabilită cu succes.")
+        # except redis.ConnectionError:
+        #     self.redis_client = None
+        #     print("🟡 Redis nu este disponibil. Cache-ul va fi ignorat.")
+
         try:
             redis_host = os.getenv("REDIS_HOST", "redis")
             redis_port = int(os.getenv("REDIS_PORT", 6379))
             redis_password = os.getenv("REDIS_PASSWORD", None)
 
-            print("Debugging: Încerc conectarea la Redis...")
-            
             self.redis_client = redis.Redis(
                 host=redis_host,
                 port=redis_port,
                 password=redis_password,
                 decode_responses=True,
                 ssl=False,
-                socket_timeout=5  
+                socket_timeout=5
             )
-            
-            print("Se trimite ping către Redis...")
             self.redis_client.ping()
-            print(f"🟢 Conexiune la Redis Cache ({redis_host}) stabilită cu succes!")
-            
+            print(f"🟢 Conexiune la Redis Cache ({redis_host}) stabilită cu succes.")
         except Exception as e:
             self.redis_client = None
-            print(f"🟡 Redis nu este disponibil: {type(e).__name__} -> {e}")
+            print(f"🟡 Redis nu este disponibil ({e}). Cache-ul va fi ignorat.")
 
     def _cosine_similarity(self, v1, v2):
         """Calculează distanța semantică între 2 vectori."""
@@ -178,11 +181,22 @@ class TutorialRAGAgent:
         # ==========================================
         # 2. LOGICĂ SEMANTIC CACHE (Cosinus)
         # ==========================================
-        hash_uri_fragmente = sorted([d.metadata.get('text_hash', '') for d in docs])
-        semnatura_context = hashlib.sha256("".join(hash_uri_fragmente).encode('utf-8')).hexdigest()
+        # hash_uri_fragmente = sorted([d.metadata.get('text_hash', '') for d in docs])
+        # semnatura_context = hashlib.sha256("".join(hash_uri_fragmente).encode('utf-8')).hexdigest()
+        # stare_config = f"R={active_reranker}_F={active_framing}_FB={active_fallback}"
+        # semcache_key = f"semcache:{stare_config}:{semnatura_context}"
+
+        # Folosim doar hash-ul fragmentului cel mai relevant (Top 1 după re-ranking) 
+        if docs:
+            top_fragment_hash = docs[0].metadata.get('text_hash', '')
+            semnatura_context = hashlib.sha256(top_fragment_hash.encode('utf-8')).hexdigest()[:16]
+        else:
+            semnatura_context = "no_docs"
+
         stare_config = f"R={active_reranker}_F={active_framing}_FB={active_fallback}"
-        
         semcache_key = f"semcache:{stare_config}:{semnatura_context}"
+
+
         q_emb = []
 
         if active_cache and self.redis_client:
@@ -205,11 +219,14 @@ class TutorialRAGAgent:
                         best_match = data
                         best_q_text = q_text
 
-                if best_match and best_sim >= 0.92:
+                if cached_entries:
+                    print(f"🔬 [CACHE CHECK] Comparat cu '{best_q_text}' -> Scorul cel mai mare: {best_sim:.4f}")
+
+                if best_match and best_sim >= 0.75:
                     print(f"⚡ [SEMANTIC CACHE HIT] Sim={best_sim:.3f} | Sursă: '{best_q_text}'")
                     timp_executie = round(time.time() - timp_start, 4)
                     
-                    if best_match["answer"] == "FLAG_LIPSA_CONTEXT":
+                    if best_match["answer"] == "LIPSA_CONTEXT":
                         return {"answer": "Îmi pare rău, dar informația solicitată nu se găsește în documentele furnizate.", "status": "lipsa_context_cache", "sources": [d.metadata for d in docs], "latency": timp_executie}
                     else:
                         # Se aplică de-anonimizarea dinamică a numelui și paginii pentru utilizatorul curent
@@ -296,7 +313,7 @@ class TutorialRAGAgent:
         
         if "LIPSA_CONTEXT" in final_response_raw or attempt >= self.max_retries:
             if active_cache and self.redis_client and q_emb:
-                cache_data = json.dumps({"embedding": q_emb, "answer": "FLAG_LIPSA_CONTEXT", "sources": []})
+                cache_data = json.dumps({"embedding": q_emb, "answer": "LIPSA_CONTEXT", "sources": []})
                 self.redis_client.hset(semcache_key, question, cache_data)
                 self.redis_client.expire(semcache_key, 86400)
                 
